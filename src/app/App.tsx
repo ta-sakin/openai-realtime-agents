@@ -27,6 +27,7 @@ import { chatSupervisorScenario } from "@/app/agentConfigs/chatSupervisor";
 import { customerServiceRetailCompanyName } from "@/app/agentConfigs/customerServiceRetail";
 import { chatSupervisorCompanyName } from "@/app/agentConfigs/chatSupervisor";
 import { simpleHandoffScenario } from "@/app/agentConfigs/simpleHandoff";
+import PDFUpload from "./components/PDFUpload";
 
 // Map used by connect logic for scenarios defined via the SDK.
 const sdkScenarioMap: Record<string, RealtimeAgent[]> = {
@@ -117,6 +118,7 @@ function App() {
       return stored ? stored === 'true' : true;
     },
   );
+  const [showPDFUpload, setShowPDFUpload] = useState<boolean>(false);
 
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
@@ -453,6 +455,12 @@ function App() {
           </div>
         </div>
         <div className="flex items-center">
+          <button
+            onClick={() => setShowPDFUpload(!showPDFUpload)}
+            className="mr-4 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            {showPDFUpload ? 'Hide Upload' : 'Upload PDF'}
+          </button>
           <label className="flex items-center text-base gap-1 mr-2 font-medium">
             Scenario
           </label>
@@ -514,6 +522,18 @@ function App() {
           )}
         </div>
       </div>
+
+      {showPDFUpload && (
+        <div className="px-5 pb-2">
+          <PDFUpload 
+            onUploadComplete={(filename, chunks) => {
+              console.log(`Uploaded ${filename} with ${chunks} chunks`);
+              // Optionally hide upload panel after successful upload
+              setTimeout(() => setShowPDFUpload(false), 2000);
+            }}
+          />
+        </div>
+      )}
 
       <div className="flex flex-1 gap-2 px-2 overflow-hidden relative">
         <Transcript

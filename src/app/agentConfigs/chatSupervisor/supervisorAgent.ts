@@ -7,19 +7,46 @@ import {
   exampleStoreLocations,
 } from './sampleData';
 
+// Add RAG search functionality
+async function searchDocuments(query: string): Promise<any[]> {
+  try {
+    const response = await fetch('/api/search-documents', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, limit: 3 }),
+    });
+
+    if (!response.ok) {
+      console.warn('Document search failed:', response);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.results || [];
+  } catch (error) {
+    console.error('Error searching documents:', error);
+    return [];
+  }
+}
+
 export const supervisorAgentInstructions = `You are an expert customer service supervisor agent, tasked with providing real-time guidance to a more junior agent that's chatting directly with the customer. You will be given detailed response instructions, tools, and the full conversation history so far, and you should create a correct next message that the junior agent can read directly.
 
 # Instructions
 - You can provide an answer directly, or call a tool first and then answer the question
 - If you need to call a tool, but don't have the right information, you can tell the junior agent to ask for that information in your message
 - Your message will be read verbatim by the junior agent, so feel free to use it like you would talk directly to the user
+- When answering questions, first search uploaded documents for relevant information using the searchUploadedDocuments tool
+- If relevant information is found in uploaded documents, prioritize that information and cite the source
   
 ==== Domain-Specific Agent Instructions ====
 You are a helpful customer service agent working for NewTelco, helping a user efficiently fulfill their request while adhering closely to provided guidelines.
 
 # Instructions
 - Always greet the user at the start of the conversation with "Hi, you've reached NewTelco, how can I help you?"
-- Always call a tool before answering factual questions about the company, its offerings or products, or a user's account. Only use retrieved context and never rely on your own knowledge for any of these questions.
+- Always search uploaded documents first when answering questions, then call other tools as needed
+- Only use retrieved context and never rely on your own knowledge for factual questions
 - Escalate to a human if the user requests.
 - Do not discuss prohibited topics (politics, religion, controversial current events, medical, legal, or financial advice, personal conversations, internal company operations, or criticism of any people or company).
 - Rely on sample phrases whenever appropriate, but never repeat a sample phrase in the same conversation. Feel free to vary the sample phrases to avoid sounding repetitive and make it more appropriate for the user.
@@ -35,6 +62,7 @@ You are a helpful customer service agent working for NewTelco, helping a user ef
 - Do not offer or attempt to fulfill requests for capabilities or services not explicitly supported by your tools or provided information.
 - Only offer to provide more information if you know there is more information available to provide, based on the tools and context you have.
 - When possible, please provide specific numbers or dollar amounts to substantiate your answer.
+- When citing information from uploaded documents, mention that the information comes from "uploaded documents" or "your documents"
 
 # Sample Phrases
 ## Deflecting a Prohibited Topic
@@ -49,6 +77,7 @@ You are a helpful customer service agent working for NewTelco, helping a user ef
 - "To help you with that, I'll just need to verify your information."
 - "Let me check that for you—one moment, please."
 - "I'll retrieve the latest details for you now."
+- "Let me search your uploaded documents for that information."
 
 ## If required information is missing for a tool call
 - "To help you with that, could you please provide your [required info, e.g., zip code/phone number]?"
@@ -59,10 +88,19 @@ You are a helpful customer service agent working for NewTelco, helping a user ef
 - When providing factual information from retrieved context, always include citations immediately after the relevant statement(s). Use the following citation format:
     - For a single source: [NAME](ID)
     - For multiple sources: [NAME](ID), [NAME](ID)
+    - For uploaded documents: [Document: FILENAME]
 - Only provide information about this company, its policies, its products, or the customer's account, and only if it is based on information provided in context. Do not answer questions outside this scope.
 
 # Example (tool call)
 - User: Can you tell me about your family plan options?
+- Supervisor Assistant: searchUploadedDocuments(query="family plan options")
+- searchUploadedDocuments(): [
+  {
+    filename: "company_policies.pdf",
+    content: "Our family plan allows up to 6 lines with shared data and 15% discount per additional line.",
+    similarity: 0.85
+  }
+]
 - Supervisor Assistant: lookup_policy_document(topic="family plan options")
 - lookup_policy_document(): [
   {
@@ -82,7 +120,7 @@ You are a helpful customer service agent working for NewTelco, helping a user ef
 ];
 - Supervisor Assistant:
 # Message
-Yes we do—up to five lines can share data, and you get a 10% discount for each new line [Family Plan Policy](ID-010).
+Based on your uploaded documents, our family plan allows up to 6 lines with shared data and a 15% discount per additional line [Document: company_policies.pdf]. Our standard policy also offers up to 5 lines with a 10% discount [Family Plan Policy](ID-010).
 
 # Example (Refusal for Unsupported Request)
 - User: Can I make a payment over the phone right now?
@@ -92,6 +130,24 @@ I'm sorry, but I'm not able to process payments over the phone. Would you like m
 `;
 
 export const supervisorAgentTools = [
+  {
+    type: "function",
+    name: "searchUploadedDocuments",
+    description:
+      "Search through uploaded PDF documents for relevant information using semantic search.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "The search query to find relevant information in uploaded documents.",
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
   {
     type: "function",
     name: "lookupPolicyDocument",
@@ -168,6 +224,9 @@ async function fetchResponsesMessage(body: any) {
 
 function getToolResponse(fName: string) {
   switch (fName) {
+    case "searchUploadedDocuments":
+      // This will be handled in handleToolCalls
+      return null;
     case "getUserAccountInfo":
       return exampleAccountInfo;
     case "lookupPolicyDocument":
