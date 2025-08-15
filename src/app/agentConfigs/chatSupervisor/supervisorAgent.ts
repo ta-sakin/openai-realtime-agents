@@ -222,11 +222,10 @@ async function fetchResponsesMessage(body: any) {
   return completion;
 }
 
-function getToolResponse(fName: string) {
+async function getToolResponse(fName: string, args: any) {
   switch (fName) {
     case "searchUploadedDocuments":
-      // This will be handled in handleToolCalls
-      return null;
+      return await searchDocuments(args.query);
     case "getUserAccountInfo":
       return exampleAccountInfo;
     case "lookupPolicyDocument":
@@ -281,7 +280,7 @@ async function handleToolCalls(
     for (const toolCall of functionCalls) {
       const fName = toolCall.name;
       const args = JSON.parse(toolCall.arguments || '{}');
-      const toolRes = getToolResponse(fName);
+      const toolRes = await getToolResponse(fName, args);
 
       // Since we're using a local function, we don't need to add our own breadcrumbs
       if (addBreadcrumb) {
